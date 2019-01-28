@@ -118,12 +118,12 @@ class Matrix4x4 {
    * @return {Matrix4x4}
    */
   static rotationX(radian) {
-    const s = sin(radian);
-    const c = cos(radian);
+    const s = Math.sin(radian);
+    const c = Math.cos(radian);
     return new Matrix4x4([
       1, 0, 0, 0,
-      0, 1, 0, 0,
-      0, 0, 1, 0,
+      0, c, s, 0,
+      0, -s, c, 0,
       0, 0, 0, 1
     ]);
   }
@@ -133,12 +133,12 @@ class Matrix4x4 {
    * @return {Matrix4x4}
    */
   static rotationY(radian) {
-    const s = sin(radian);
-    const c = cos(radian);
+    const s = Math.sin(radian);
+    const c = Math.cos(radian);
     return new Matrix4x4([
-      1, 0, 0, 0,
+      c, 0, -s, 0,
       0, 1, 0, 0,
-      0, 0, 1, 0,
+      s, 0, c, 0,
       0, 0, 0, 1
     ]);
   }
@@ -148,11 +148,11 @@ class Matrix4x4 {
    * @return {Matrix4x4}
    */
   static rotationZ(radian) {
-    const s = sin(radian);
-    const c = cos(radian);
+    const s = Math.sin(radian);
+    const c = Math.cos(radian);
     return new Matrix4x4([
-      s, c, 0, 0,
-      -c, s, 0, 0,
+      c, s, 0, 0,
+      -s, c, 0, 0,
       0, 0, 1, 0,
       0, 0, 0, 1
     ]);
@@ -316,8 +316,8 @@ class Matrix4x4 {
    */
   static lookTo(front, up) {
     const z = Vector3.normalize(front).mult(-1);
-    const x = Vector3.cross(up, z);
-    const y = Vector3.cross(z, x);
+    const x = Vector3.cross(up, z).normalize();
+    const y = Vector3.cross(z, x).normalize();
 
     return new Matrix4x4([
       x.x, x.y, x.z, 0.0,
@@ -325,5 +325,15 @@ class Matrix4x4 {
       z.x, z.y, z.z, 0.0,
       0.0, 0.0, 0.0, 1.0
     ]);
+  }
+
+  /**
+   * @param {Vector3} position 
+   * @param {Vector3} target
+   * @param {Vector3} up
+   */
+  static lookAt(position, target, up) {
+    return Matrix4x4.lookTo(Vector3.sub(target, position), up)
+      .mult(Matrix4x4.translation(position.x, position.y, position.z));
   }
 }

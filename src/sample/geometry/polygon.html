@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Polygon</title>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="canvas"></canvas>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.3/dat.gui.min.js"></script>
+    <script src="../js/webgl.js"></script>
+    <script src="../js/Vector3.js"></script>
+    <script src="../js/Matrix4x4.js"></script>
+    <script src="../js/geometry.js"></script>
+    <script>
+      document.addEventListener('DOMContentLoaded', () => {
+
+        const vertexSource = `#version 300 es  
+layout (location = 0) in vec3 position;
+layout (location = 1) in vec3 normal;
+layout (location = 2) in vec2 uv;
+
+out vec3 v_normal;
+out vec2 v_uv;
+
+uniform mat4 u_mvpMatrix;
+
+void main(void) {
+  v_normal = normal;
+  v_uv = uv;
+  gl_Position = u_mvpMatrix * vec4(position, 1.0);
+}
+`
+        
+        const fragmentSource = `#version 300 es
+        precision highp float;
+
+in vec3 v_normal;
+in vec2 v_uv;
+out vec4 o_color;
+
+uniform int u_shading; // 0: lighting, 1: normal, 2: uv
+uniform vec3 u_lightDir;
+
+vec3 materialColor = vec3(0.95, 0.5, 0.5);
+vec3 lightColor = vec3(1.0);
+vec3 ambient = vec3(0.1);
+
+void main(void) {
+  vec3 normal = normalize(v_normal);
+
+  vec3 color = vec3(0.0);
+
+  if (u_shading == 0) {
+    vec3 diffuse = materialColor * lightColor * max(0.0, dot(normal, u_lightDir));
+    color = ambient + diffuse;
+  } else if (u_shading == 1) {
+    color = normal * 0.5 + 0.5;
+  } else if (u_shading == 2) {
+    color = vec3(v_uv, 0.0);
+  }
+
+  o_color = vec4(color, 1.0);
+}
+`
+
+        let geom, ibo, positionVbo, normalVbo, uvVbo, vao;
+        const createGeometry = () => {
+          geom = geometry.polygon(params.n, params.radius, params.segment);
+
+          ibo = webgl.createIbo(gl, geom.indices);
+          positionVbo = webgl.createVbo(gl, geom.positions);
+          normalVbo = webgl.createVbo(gl, geom.normals);
+          uvVbo = webgl.createVbo(gl, geom.uvs);
+
+          vao = gl.createVertexArray();
+          gl.bindVertexArray(vao);
+          gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
+          gl.bindBuffer(gl.ARRAY_BUFFER, positionVbo);
+          gl.enableVertexAttribArray(0);
+          gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+          gl.bindBuffer(gl.ARRAY_BUFFER, normalVbo);
+          gl.enableVertexAttribArray(1);
+          gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0);
+          gl.bindBuffer(gl.ARRAY_BUFFER, uvVbo);
+          gl.enableVertexAttribArray(2);
+          gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 0, 0);
+          gl.bindBuffer(gl.ARRAY_BUFFER, null);  
+          gl.bindVertexArray(null);
+        }
+
+        const shading = {
+          'lighting': 0,
+          'normal': 1,
+          'uv': 2
+        };
+
+        const params = {
+          shading: shading['lighting'],
+          n: 5,
+          radius: 2.5,
+          segment: 5.0,
+          camera: { rotation: 0.0, radius: 10.0, height: 0.0 },
+          light: { theta: Math.PI * 0.25, phi: -Math.PI * 0.125 }
+        };
+        const gui = new dat.GUI();
+        gui.add(params, 'shading', shading);
+        gui.add(params, 'n', 3, 10).step(1).onFinishChange(createGeometry);
+        gui.add(params, 'radius', 0.0, 10.0).onFinishChange(createGeometry);
+        gui.add(params, 'segment', 1, 10).step(1).onFinishChange(createGeometry);
+        const guiCamera = gui.addFolder('camera');
+        guiCamera.add(params.camera, 'rotation', -Math.PI, Math.PI);
+        guiCamera.add(params.camera, 'radius', 5.0, 15.0);
+        guiCamera.add(params.camera, 'height', -10.0, 10.0);
+        const guiLight = gui.addFolder('light');
+        guiLight.add(params.light, 'theta', 0.0, Math.PI);
+        guiLight.add(params.light, 'phi', -Math.PI, Math.PI);
+
+        const canvas = document.getElementById('canvas');
+        const gl = canvas.getContext('webgl2');
+
+        const resize = () => {
+          canvas.width = window.innerWidth;
+          canvas.height = window.innerHeight;
+          gl.viewport(0, 0, canvas.width, canvas.height);
+        }
+        resize();
+        window.addEventListener('resize', resize);
+
+        const program = webgl.createProgram(gl, vertexSource, fragmentSource);
+        const uniformLocations = webgl.getUniformLocations(gl, program, ['u_shading', 'u_lightDir', 'u_mvpMatrix']);
+        createGeometry();
+        gl.clearColor(0.7, 0.7, 0.7, 1.0);
+        gl.clearDepth(1.0);
+        gl.enable(gl.DEPTH_TEST);
+
+        const cameraTarget = new Vector3(0.0, 0.0, 0.0);
+        const render = () => {
+          gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+          gl.useProgram(program);
+          gl.uniform1i(uniformLocations['u_shading'], params.shading);
+
+          const cameraPosition = new Vector3(
+            params.camera.radius * Math.sin(params.camera.rotation), 
+            params.camera.height, 
+            params.camera.radius * Math.cos(params.camera.rotation));
+          const cameraUp = new Vector3(0.0, 1.0, 0.0);
+          const cameraMatrix = Matrix4x4.lookTo(Vector3.sub(cameraTarget, cameraPosition), cameraUp)
+              .mult(Matrix4x4.translation(cameraPosition.x, cameraPosition.y, cameraPosition.z));
+          const viewMatrix = Matrix4x4.inverse(cameraMatrix);
+          const projectionMatrix = Matrix4x4.perspective(canvas.width / canvas.height, 60, 0.01, 1000);
+          const mvpMatrix = Matrix4x4.identity().mult(viewMatrix).mult(projectionMatrix);
+          gl.uniformMatrix4fv(uniformLocations['u_mvpMatrix'], false, mvpMatrix.elements);
+
+          const lightDir = new Vector3(
+            Math.sin(params.light.theta) * Math.sin(params.light.phi),
+            Math.cos(params.light.theta),
+            Math.sin(params.light.theta) * Math.cos(params.light.phi)
+          );
+          gl.uniform3f(uniformLocations['u_lightDir'], lightDir.x, lightDir.y, lightDir.z);
+          gl.bindVertexArray(vao);
+          gl.drawElements(gl.TRIANGLES, geom.indices.length, gl.UNSIGNED_SHORT, 0);
+          requestAnimationFrame(render);
+        }
+        render();
+      });
+    </script>
+  </body>
+</html>

@@ -30,16 +30,23 @@ const geometry = {};
     return i + 6;
   };
 
-  geometry.quad = function() {
+  /**
+   * @param {number} xSize
+   * @param {number} ySize
+   * @return {object}
+   */
+  geometry.quad = function(xSize, ySize) {
     const indices = new Int16Array([
       0, 1, 2,
       1, 3, 2
     ]);
+    const hx = xSize * 0.5;
+    const hy = ySize * 0.5;
     const positions = new Float32Array([
-      -0.5, -0.5, 0.0,
-      0.5, -0.5, 0.0,
-      -0.5,  0.5, 0.0,
-      0.5,  0.5, 0.0
+      -hx, -hy, 0.0,
+      hx, -hy, 0.0,
+      -hx, hy, 0.0,
+      hx, hy, 0.0
     ]);
     const normals = new Float32Array([
       0.0, 0.0, 1.0,
@@ -63,62 +70,10 @@ const geometry = {};
   };
 
   /**
-   * @param {number} xSize
-   * @param {number} ySize
-   * @param {number} xSegment must be bigger than or equal to 1
-   * @param {number} ySegment must be bigger than or equal to 1
+   * @param {number} n number of corners, must be bigger than or equal to 3
+   * @param {number} radius
+   * @param {number} radiusSegment must be bigger than or equal to 1
    */
-  geometry.plane = function(xSize, ySize, xSegment, ySegment) {
-    const vertexNum = (xSegment + 1) * (ySegment + 1);
-    const triangleNum = xSegment * ySegment * 2;
-    const indices = new Int16Array(3.0 * triangleNum);
-    const positions = new Float32Array(3 * vertexNum);
-    const normals = new Float32Array(3 * vertexNum);
-    const uvs = new Float32Array(2 * vertexNum);
-
-    const xStep = xSize / xSegment;
-    const yStep = ySize / ySegment;
-    const halfX = 0.5 * xSize;
-    const halfY = 0.5 * ySize;
-
-    // setup positions & normals & uvs
-    let posCount = 0;
-    let normalCount = 0;
-    let uvCount = 0;
-    for (let yi = 0; yi <= ySegment; yi++) {
-      const y = yi * yStep - halfY;
-      const uvY = yi / ySegment;
-      for (let xi = 0; xi <= xSegment; xi++) {
-        const x = xi * xStep - halfX;
-        const uvX = xi / xSegment;
-        posCount = addVertex3(positions, posCount, x, y, 0.0);
-        normalCount = addVertex3(normals, normalCount, 0.0, 0.0, 1.0);
-        uvCount = addVertex2(uvs, uvCount, uvX, uvY);
-      }
-    }
-
-    // setup indices
-    let indexCount = 0;
-    for (let yi = 0; yi < ySegment; yi++) {
-      const yj = yi + 1;
-      for (let xi = 0; xi < xSegment; xi++) {
-        const xj = xi + 1;
-        const v00 = xi + yi * (xSegment + 1);
-        const v10 = xj + yi * (xSegment + 1);
-        const v01 = xi + yj * (xSegment + 1); 
-        const v11 = xj + yj * (xSegment + 1);
-        indexCount = addQuad(indices, indexCount, v00, v10, v01, v11);
-      }
-    }
-
-    return {
-      indices: indices,
-      positions: positions,
-      normals: normals,
-      uvs: uvs
-    };
-  }
-
   geometry.polygon = function(n, radius, radiusSegment) {
     const vertexNum = 1 + n * radiusSegment;
     const triangleNum = n * (1 + 2 * (radiusSegment - 1));
@@ -179,9 +134,67 @@ const geometry = {};
   }
 
   /**
+   * @param {number} xSize
+   * @param {number} ySize
+   * @param {number} xSegment must be bigger than or equal to 1
+   * @param {number} ySegment must be bigger than or equal to 1
+   * @return {object}
+   */
+  geometry.plane = function(xSize, ySize, xSegment, ySegment) {
+    const vertexNum = (xSegment + 1) * (ySegment + 1);
+    const triangleNum = xSegment * ySegment * 2;
+    const indices = new Int16Array(3.0 * triangleNum);
+    const positions = new Float32Array(3 * vertexNum);
+    const normals = new Float32Array(3 * vertexNum);
+    const uvs = new Float32Array(2 * vertexNum);
+
+    const xStep = xSize / xSegment;
+    const yStep = ySize / ySegment;
+    const halfX = 0.5 * xSize;
+    const halfY = 0.5 * ySize;
+
+    // setup positions & normals & uvs
+    let posCount = 0;
+    let normalCount = 0;
+    let uvCount = 0;
+    for (let yi = 0; yi <= ySegment; yi++) {
+      const y = yi * yStep - halfY;
+      const uvY = yi / ySegment;
+      for (let xi = 0; xi <= xSegment; xi++) {
+        const x = xi * xStep - halfX;
+        const uvX = xi / xSegment;
+        posCount = addVertex3(positions, posCount, x, y, 0.0);
+        normalCount = addVertex3(normals, normalCount, 0.0, 0.0, 1.0);
+        uvCount = addVertex2(uvs, uvCount, uvX, uvY);
+      }
+    }
+
+    // setup indices
+    let indexCount = 0;
+    for (let yi = 0; yi < ySegment; yi++) {
+      const yj = yi + 1;
+      for (let xi = 0; xi < xSegment; xi++) {
+        const xj = xi + 1;
+        const v00 = xi + yi * (xSegment + 1);
+        const v10 = xj + yi * (xSegment + 1);
+        const v01 = xi + yj * (xSegment + 1); 
+        const v11 = xj + yj * (xSegment + 1);
+        indexCount = addQuad(indices, indexCount, v00, v10, v01, v11);
+      }
+    }
+
+    return {
+      indices: indices,
+      positions: positions,
+      normals: normals,
+      uvs: uvs
+    };
+  }
+
+  /**
    * @param {number} radius
-   * @param {number} thetaSegment
-   * @param {number} phiSegment
+   * @param {number} thetaSegment must be bigger than or equal to 3
+   * @param {number} phiSegment must be bigger than or equal to 3
    * @return {object}
    */
   geometry.sphere = function(radius, thetaSegment, phiSegment) {
@@ -211,14 +224,11 @@ const geometry = {};
         const phi = pi * phiStep;
         const sinP = Math.sin(-phi);
         const cosP = Math.cos(-phi);
-        const p = new Vector3(
-          radius * sinT * cosP,
-          radius * cosT,
-          radius * sinT * sinP
-        );
-        posCount = addVertex3(positions, posCount, p.x, p.y, p.z);
-        const np = Vector3.normalize(p);
-        normalCount = addVertex3(normals, normalCount, np.x, np.y, np.z);
+        const nx = sinT * cosP;
+        const ny = cosT;
+        const nz = sinT * sinP; 
+        posCount = addVertex3(positions, posCount, radius * nx, radius * ny, radius * nz);
+        normalCount = addVertex3(normals, normalCount, nx, ny, nz);
         const uvX = pi / phiSegment;
         uvCount = addVertex2(uvs, uvCount, uvX, uvY);
       }
@@ -260,6 +270,14 @@ const geometry = {};
     };
   }
 
+  /**
+   * @param {number} xSize
+   * @param {number} ySize
+   * @param {number} zSize
+   * @param {number} xSegment must be bigger than or equal to 1
+   * @param {number} ySegment must be bigger than or equal to 1
+   * @param {number} zSegment must be bigger than or equal to 1
+   */
   geometry.box = function(xSize, ySize, zSize, xSegment, ySegment, zSegment) {
     const vertexNum = 2 * ((xSegment + 1) * (ySegment + 1) + (ySegment + 1) * (zSegment + 1) + (zSegment + 1) * (xSegment + 1));
     const triangleNum = 2 * 2 * (xSegment * ySegment + ySegment * zSegment + zSegment * xSegment);
@@ -456,19 +474,28 @@ const geometry = {};
     // setup positions & normals & uvs
     for (let ai =0; ai < majorSegment; ai++) {
       const majorAng = ai * majorStep;
-      const center = new Vector3(majorRadius * Math.cos(-majorAng), 0, majorRadius * Math.sin(-majorAng));
+      const center = {
+        x: majorRadius * Math.cos(-majorAng), 
+        y: 0,
+        z: majorRadius * Math.sin(-majorAng)
+      };
       const uvY = ai / majorSegment;
       for (let ii = 0; ii < minorSegment; ii++) {
         const minorAng = ii * minorStep;
         const minorX = majorRadius + minorRadius * Math.cos(minorAng);
-        const position = new Vector3(
-          minorX * Math.cos(-majorAng),
-          minorRadius * Math.sin(minorAng),
-          minorX * Math.sin(-majorAng)
-        );
+        const position = {
+          x: minorX * Math.cos(-majorAng),
+          y: minorRadius * Math.sin(minorAng),
+          z: minorX * Math.sin(-majorAng)
+        };
         posCount = addVertex3(positions, posCount, position.x, position.y, position.z);
-        const normal = Vector3.sub(position, center).normalize();
-        normalCount = addVertex3(normals, normalCount, normal.x, normal.y, normal.z);
+        const toPC = {
+          x: position.x - center.x,
+          y: position.y - center.y,
+          z: position.z - center.z
+        };
+        const lengthPC = Math.sqrt(toPC.x * toPC.x + toPC.y * toPC.y + toPC.z * toPC.z);
+        normalCount = addVertex3(normals, normalCount, toPC.x / lengthPC, toPC.y / lengthPC, toPC.z / lengthPC);
         const uvX = ii / minorSegment;
         uvCount = addVertex2(uvs, uvCount, uvX, uvY);
       }
@@ -494,6 +521,6 @@ const geometry = {};
       normals: normals,
       uvs: uvs
     };
-  }
+  };
 
 }());

@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Phong Shading</title>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="canvas"></canvas>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.3/dat.gui.min.js"></script>
+    <script src="../js/webgl.js"></script>
+    <script src="../js/Vector3.js"></script>
+    <script src="../js/Matrix4x4.js"></script>
+    <script src="../js/geometry.js"></script>
+<script>
+      document.addEventListener('DOMContentLoaded', () => {
+
+        const vertexSource =
+`#version 300 es
+
+layout (location = 0) in vec3 position;
+layout (location = 1) in vec3 normal;
+
+out vec3 v_normal;
+out vec3 v_worldPos;
+
+uniform mat4 u_modelMatrix;
+uniform mat4 u_mvpMatrix;
+
+void main(void) {
+  v_normal = (u_modelMatrix * vec4(normal, 0.0)).xyz;
+  v_worldPos = (u_modelMatrix * vec4(position, 1.0)).xyz;
+  gl_Position = u_mvpMatrix * vec4(position, 1.0);
+}
+`
+
+        const fragmentSource = 
+`#version 300 es
+
+precision highp float;
+
+#define PI 3.14159265359
+
+in vec3 v_normal;
+in vec3 v_worldPos;
+out vec4 o_color;
+
+uniform vec3 u_diffuse;
+uniform vec3 u_ambient;
+uniform vec3 u_specular;
+uniform float u_shiness;
+uniform bool u_normalize;
+uniform vec3 u_lightColor;
+uniform vec3 u_lightDir;
+uniform vec3 u_cameraPos;
+
+void main(void) {
+  vec3 normal = normalize(v_normal);  
+  vec3 diffuse = u_lightColor * u_diffuse * max(0.0, dot(normal, u_lightDir));
+  vec3 viewDir = normalize(u_cameraPos - v_worldPos);
+  vec3 refDir = reflect(-viewDir, normal);
+  vec3 specular = u_lightColor * u_specular * pow(max(0.0, dot(refDir, u_lightDir)), u_shiness);
+  if (u_normalize) {
+    diffuse /= PI;
+  }
+  vec3 c = u_ambient + diffuse + specular;
+  o_color = vec4(c, 1.0);
+}
+`
+        const params = {
+          diffuse: [255, 128, 128],
+          specular: [255, 255, 255],
+          shiness: 32,
+          ambient: [30, 30, 30],
+          normalize: false,
+          camera: { rotation: 0.0, radius: 10.0, height: 0.0 },
+          light: { 
+            position: { theta: Math.PI * 0.25, phi: -Math.PI * 0.125 },
+            color: [255, 255, 255],
+            intensity: 1.0,
+          }
+        };
+        const gui = new dat.GUI();
+        gui.addColor(params, 'diffuse');
+        gui.addColor(params, 'specular');
+        gui.add(params, 'shiness', 1.0, 64.0);
+        gui.addColor(params, 'ambient');
+        gui.add(params, 'normalize');
+        const guiCamera = gui.addFolder('camera');
+        guiCamera.add(params.camera, 'rotation', -Math.PI, Math.PI);
+        guiCamera.add(params.camera, 'radius', 5.0, 15.0);
+        guiCamera.add(params.camera, 'height', -10.0, 10.0);
+        const guiLight = gui.addFolder('light');
+        const guiLightPosition = guiLight.addFolder('position');
+        guiLightPosition.add(params.light.position, 'theta', 0.0, Math.PI);
+        guiLightPosition.add(params.light.position, 'phi', -Math.PI, Math.PI);
+        guiLight.addColor(params.light, 'color');
+        guiLight.add(params.light, 'intensity', 0.0, 10.0);
+
+        const canvas = document.getElementById('canvas');
+        const gl = canvas.getContext('webgl2');
+
+        const resize = () => {
+          canvas.width = window.innerWidth;
+          canvas.height = window.innerHeight;
+          gl.viewport(0, 0, canvas.width, canvas.height);
+        }
+        resize();
+        window.addEventListener('resize', resize);
+
+        const program = webgl.createProgram(gl, vertexSource, fragmentSource);
+        const uniformLocations = webgl.getUniformLocations(gl, program, [
+          'u_modelMatrix',
+          'u_mvpMatrix',
+          'u_diffuse',
+          'u_specular',
+          'u_shiness',
+          'u_ambient', 
+          'u_normalize',
+          'u_lightColor', 
+          'u_lightDir',
+          'u_cameraPos',
+        ]);
+
+        const sphere = geometry.sphere(2.0, 32, 64);
+        const box = geometry.box(4.0, 3.0, 2.0, 4, 3, 2);
+        const torus = geometry.torus(2.0, 0.5, 32, 32);
+
+        const geomObjs = [
+          {
+            vao: webgl.createVao(gl,
+              webgl.createIbo(gl, sphere.indices),
+              [
+                { buffer: webgl.createVbo(gl, sphere.positions), size: 3 },
+                { buffer: webgl.createVbo(gl, sphere.normals), size: 3 }
+              ]
+            ),
+            length: sphere.indices.length,
+            matrix: Matrix4x4.translation(0.0, 0.0, 0.0)
+          }, {
+            vao: webgl.createVao(gl,
+              webgl.createIbo(gl, box.indices),
+              [
+                { buffer: webgl.createVbo(gl, box.positions), size: 3 },
+                { buffer: webgl.createVbo(gl, box.normals), size: 3 }
+              ]
+            ),
+            length: box.indices.length,
+            matrix: Matrix4x4.translation(-5.0, 0.0, 0.0)
+          }, {
+            vao: webgl.createVao(gl,
+              webgl.createIbo(gl, torus.indices),
+              [
+                { buffer: webgl.createVbo(gl, torus.positions), size: 3 },
+                { buffer: webgl.createVbo(gl, torus.normals), size: 3 }
+              ]
+            ),
+            length: torus.indices.length,
+            matrix: Matrix4x4.translation(5.0, 0.0, 0.0)
+          }
+        ];
+
+        gl.clearColor(0.7, 0.7, 0.7, 1.0);
+        gl.clearDepth(1.0);
+        gl.enable(gl.DEPTH_TEST);
+
+        const cameraTarget = new Vector3(0.0, 0.0, 0.0);
+        const render = () => {
+          gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+          gl.useProgram(program);
+
+          const cameraPosition = new Vector3(
+            params.camera.radius * Math.sin(params.camera.rotation),
+            params.camera.height,
+            params.camera.radius * Math.cos(params.camera.rotation)
+          );
+
+          gl.uniform3fv(uniformLocations['u_lightColor'], params.light.color.map(v => v * params.light.intensity / 255.0));
+          const lightDir = [
+            Math.sin(params.light.position.theta) * Math.sin(params.light.position.phi),
+            Math.cos(params.light.position.theta),
+            Math.sin(params.light.position.theta) * Math.cos(params.light.position.phi)
+          ];
+          gl.uniform3fv(uniformLocations['u_lightDir'], lightDir);
+          gl.uniform3f(uniformLocations['u_cameraPos'], cameraPosition.x, cameraPosition.y, cameraPosition.z);
+
+          gl.uniform3fv(uniformLocations['u_diffuse'], params.diffuse.map(v => v / 255.0));
+          gl.uniform3fv(uniformLocations['u_specular'], params.specular.map(v => v / 255.0));
+          gl.uniform1f(uniformLocations['u_shiness'], params.shiness);
+          gl.uniform3fv(uniformLocations['u_ambient'], params.ambient.map(v => v / 255.0));
+          gl.uniform1i(uniformLocations['u_normalize'], params.normalize)
+
+          const cameraMatrix = Matrix4x4.lookAt(cameraPosition, cameraTarget, new Vector3(0.0, 1.0, 0.0));
+          const viewMatrix = Matrix4x4.inverse(cameraMatrix);
+          const projectionMatrix = Matrix4x4.perspective(canvas.width / canvas.height, 60, 0.01, 1000);
+
+          geomObjs.forEach((geomObj) => {
+            const mvpMatrix = Matrix4x4.identity().mult(geomObj.matrix).mult(viewMatrix).mult(projectionMatrix);
+            gl.uniformMatrix4fv(uniformLocations['u_modelMatrix'], false, geomObj.matrix.elements);
+            gl.uniformMatrix4fv(uniformLocations['u_mvpMatrix'], false, mvpMatrix.elements);
+
+            gl.bindVertexArray(geomObj.vao);
+            gl.drawElements(gl.TRIANGLES, geomObj.length, gl.UNSIGNED_SHORT, 0);
+          });
+
+          requestAnimationFrame(render);
+        };
+        render();
+      });
+    </script>
+  </body>
+</html>

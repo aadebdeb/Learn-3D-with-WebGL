@@ -1,4 +1,4 @@
-# Matrix (行列)
+# 行列
 
 ### Identity Matrix (単位行列) 
 
